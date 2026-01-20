@@ -1,0 +1,12 @@
+# Flask web framework
+flask>=3.0.0
+
+# Gunicorn for production WSGI server
+gunicorn>=22.0.0
+
+# Coqui TTS fork with Python 3.12 support
+# https://github.com/idiap/coqui-ai-TTS
+coqui-tts>=0.24.0
+
+# Audio file I/O for WAV output
+soundfile>=0.13.1
