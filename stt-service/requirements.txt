@@ -1,0 +1,8 @@
+# Flask web framework
+flask>=3.0.0
+
+# OpenAI Whisper for speech-to-text
+openai-whisper>=20240930
+
+# Gunicorn for production WSGI server
+gunicorn>=22.0.0
