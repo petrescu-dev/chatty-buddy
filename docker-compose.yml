@@ -70,7 +70,9 @@ services:
       - seccomp:unconfined
 
   ollama:
-    image: ollama/ollama:rocm
+    build:
+      context: ./ollama-service
+      dockerfile: Dockerfile
     ports:
       - "11434:11434"
     volumes:
