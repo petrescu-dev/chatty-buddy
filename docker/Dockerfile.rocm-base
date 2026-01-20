@@ -17,6 +17,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Ensure Python output is sent straight to terminal without buffering
 ENV PYTHONUNBUFFERED=1
 
+# Create video and render groups for GPU device access
+# These groups are required for docker-compose group_add to resolve by name
+RUN groupadd -f video && groupadd -f render
+
 # Install system dependencies
 # - python3.12: Python runtime
 # - python3.12-venv: Virtual environment support
