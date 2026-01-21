@@ -72,10 +72,22 @@ await fastify.register(fastifyStatic, {
 });
 
 // Types
+interface ServiceMetrics {
+  durationMs: number;
+}
+
+interface ChatMetrics {
+  stt: ServiceMetrics;
+  llm: ServiceMetrics;
+  tts: ServiceMetrics;
+  total: ServiceMetrics;
+}
+
 interface ChatResponse {
   transcription: string;
   response: string;
   audioBase64: string;
+  metrics: ChatMetrics;
 }
 
 interface STTResponse {
@@ -85,6 +97,21 @@ interface STTResponse {
 interface OllamaResponse {
   response: string;
   done: boolean;
+}
+
+interface TimedResult<T> {
+  result: T;
+  durationMs: number;
+}
+
+/**
+ * Execute an async function and measure its duration
+ */
+async function withTiming<T>(fn: () => Promise<T>): Promise<TimedResult<T>> {
+  const start = Date.now();
+  const result = await fn();
+  const durationMs = Date.now() - start;
+  return { result, durationMs };
 }
 
 /**
@@ -192,11 +219,10 @@ fastify.post<{ Reply: ChatResponse }>("/api/chat", async (request, reply) => {
   try {
     // Step 1: Transcribe audio
     fastify.log.info("Transcribing audio...");
-    const transcriptionStart = Date.now();
-    const transcription = await transcribeAudio(audioBuffer, filename);
-    fastify.log.info(
-      `Transcription complete (${Date.now() - transcriptionStart}ms): "${transcription}"`
+    const { result: transcription, durationMs: sttDuration } = await withTiming(
+      () => transcribeAudio(audioBuffer, filename)
     );
+    fastify.log.info(`Transcription complete (${sttDuration}ms): "${transcription}"`);
 
     if (!transcription.trim()) {
       reply.code(400);
@@ -205,28 +231,36 @@ fastify.post<{ Reply: ChatResponse }>("/api/chat", async (request, reply) => {
 
     // Step 2: Generate LLM response
     fastify.log.info("Generating LLM response...");
-    const llmStart = Date.now();
-    const llmResponse = await generateLLMResponse(transcription);
+    const { result: llmResponse, durationMs: llmDuration } = await withTiming(
+      () => generateLLMResponse(transcription)
+    );
     fastify.log.info(
-      `LLM response complete (${Date.now() - llmStart}ms): "${llmResponse.substring(0, 100)}..."`
+      `LLM response complete (${llmDuration}ms): "${llmResponse.substring(0, 100)}..."`
     );
 
     // Step 3: Synthesize speech
     fastify.log.info("Synthesizing speech...");
-    const ttsStart = Date.now();
-    const audioResponse = await synthesizeSpeech(llmResponse);
-    fastify.log.info(`TTS complete (${Date.now() - ttsStart}ms): ${audioResponse.length} bytes`);
+    const { result: audioResponse, durationMs: ttsDuration } = await withTiming(
+      () => synthesizeSpeech(llmResponse)
+    );
+    fastify.log.info(`TTS complete (${ttsDuration}ms): ${audioResponse.length} bytes`);
 
     // Convert audio to base64 for JSON response
     const audioBase64 = audioResponse.toString("base64");
 
-    const totalTime = Date.now() - startTime;
-    fastify.log.info(`Total request time: ${totalTime}ms`);
+    const totalDuration = Date.now() - startTime;
+    fastify.log.info(`Total request time: ${totalDuration}ms`);
 
     return {
       transcription,
       response: llmResponse,
       audioBase64,
+      metrics: {
+        stt: { durationMs: sttDuration },
+        llm: { durationMs: llmDuration },
+        tts: { durationMs: ttsDuration },
+        total: { durationMs: totalDuration },
+      },
     };
   } catch (error) {
     fastify.log.error(error, "Chat pipeline error");

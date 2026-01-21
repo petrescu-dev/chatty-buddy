@@ -54,6 +54,7 @@ function App() {
           text: response.response,
           timestamp: new Date(),
           audioUrl,
+          metrics: response.metrics,
         };
 
         setMessages(prev => [...prev, userMessage, agentMessage]);

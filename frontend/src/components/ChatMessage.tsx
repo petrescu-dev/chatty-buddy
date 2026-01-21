@@ -74,33 +74,40 @@ export function ChatMessage({ message }: ChatMessageProps) {
                   onEnded={() => setIsPlaying(false)}
                   className="hidden"
                 />
-                <button
-                  onClick={handlePlayPause}
-                  className={`
-                    flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium
-                    transition-all duration-200
-                    ${isPlaying 
-                      ? 'bg-agent/20 text-agent' 
-                      : 'bg-surface-600/50 text-surface-300 hover:bg-surface-600 hover:text-surface-200'
-                    }
-                  `}
-                >
-                  {isPlaying ? (
-                    <>
-                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                      </svg>
-                      <span>Pause</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M8 5v14l11-7z" />
-                      </svg>
-                      <span>Play</span>
-                    </>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handlePlayPause}
+                    className={`
+                      flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium
+                      transition-all duration-200
+                      ${isPlaying 
+                        ? 'bg-agent/20 text-agent' 
+                        : 'bg-surface-600/50 text-surface-300 hover:bg-surface-600 hover:text-surface-200'
+                      }
+                    `}
+                  >
+                    {isPlaying ? (
+                      <>
+                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                        </svg>
+                        <span>Pause</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                        <span>Play</span>
+                      </>
+                    )}
+                  </button>
+                  {message.metrics && (
+                    <span className="text-[10px] text-surface-500 font-mono">
+                      STT {message.metrics.stt.durationMs}ms · LLM {message.metrics.llm.durationMs}ms · TTS {message.metrics.tts.durationMs}ms
+                    </span>
                   )}
-                </button>
+                </div>
               </div>
             )}
 
