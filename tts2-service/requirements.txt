@@ -1,0 +1,18 @@
+# Flask web framework
+flask>=3.0.0
+
+# Gunicorn for production WSGI server
+gunicorn>=22.0.0
+
+# Kokoro ONNX - lightweight 82M parameter TTS model (ONNX version)
+# https://github.com/thewh1teagle/kokoro-onnx
+kokoro-onnx>=0.4.0
+
+# Audio file I/O for WAV output
+soundfile>=0.13.1
+
+# NumPy for audio array handling
+numpy>=1.26.0
+
+# Note: onnxruntime-rocm is installed separately in Dockerfile
+# from AMD's repository for ROCm/MIGraphX GPU acceleration

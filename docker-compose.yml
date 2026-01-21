@@ -8,7 +8,7 @@ services:
     environment:
       - STT_SERVICE_URL=http://stt-service:8001
       - LLM_SERVICE_URL=http://ollama:11434
-      - TTS_SERVICE_URL=http://tts-service:8002
+      - TTS_SERVICE_URL=http://tts2-service:8003
     depends_on:
       - stt-service
       - tts-service
@@ -53,6 +53,30 @@ services:
     security_opt:
       - seccomp:unconfined
 
+  tts2-service:
+    build:
+      context: ./tts2-service
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
+    volumes:
+      - /opt/rocm-7.1.1:/opt/rocm:ro
+      - tts2-miopen-cache:/root/.cache/miopen
+      - tts2-migraphx-cache:/root/.cache/migraphx
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - video
+      - render
+    environment:
+      - HSA_OVERRIDE_GFX_VERSION=12.0.1
+      - ROCM_PATH=/opt/rocm
+      - MIOPEN_USER_DB_PATH=/root/.cache/miopen
+      - ORT_MIGRAPHX_FP16_ENABLE=1
+    security_opt:
+      - seccomp:unconfined
+
   ollama:
     build:
       context: ./ollama-service
@@ -75,3 +99,5 @@ services:
 volumes:
   ollama-data:
   tts-miopen-cache:
+  tts2-miopen-cache:
+  tts2-migraphx-cache:
