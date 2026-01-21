@@ -5,15 +5,17 @@ A voice chat agent application that combines speech-to-text, LLM-powered respons
 ## Architecture
 
 ```
-┌─────────────────────────────────────┐     ┌─────────────────────────────────────┐
-│           Server (:3001)            │     │          ML Services (ROCm GPU)     │
-│  ┌─────────────┐  ┌──────────────┐  │     │                                     │
-│  │  Frontend   │  │   Fastify    │──┼────▶│  ┌─────────┐  ┌───────┐  ┌───────┐ │
-│  │  (Static)   │  │     API      │  │     │  │   STT   │  │  LLM  │  │  TTS  │ │
-│  │  React/Vite │  │              │◀─┼─────│  │ Whisper │  │gemma-3│  │ VITS  │ │
-│  └─────────────┘  └──────────────┘  │     │  │  :8001  │  │:11434 │  │ :8002 │ │
-└─────────────────────────────────────┘     │  └─────────┘  └───────┘  └───────┘ │
-                                            └─────────────────────────────────────┘
+┌─────────────────────────────────────┐     ┌─────────────────────────────────────────────┐
+│           Server (:3001)            │     │            ML Services (ROCm GPU)           │
+│  ┌─────────────┐  ┌──────────────┐  │     │                                             │
+│  │  Frontend   │  │   Fastify    │──┼────▶│  ┌─────────┐  ┌───────┐  ┌───────────────┐ │
+│  │  (Static)   │  │     API      │  │     │  │   STT   │  │  LLM  │  │      TTS      │ │
+│  │  React/Vite │  │              │◀─┼─────│  │ Whisper │  │gemma-3│  │    Kokoro     │ │
+│  └─────────────┘  └──────────────┘  │     │  │  :8001  │  │:11434 │  ├───────┬───────┤ │
+└─────────────────────────────────────┘     │  └─────────┘  └───────┘  │PyTorch│ ONNX  │ │
+                                            │                          │ :8002 │ :8003 │ │
+                                            │                          └───────┴───────┘ │
+                                            └─────────────────────────────────────────────┘
 ```
 
 ## Project Structure
@@ -23,7 +25,8 @@ chatty-buddy/
 ├── frontend/                 # React + Vite + Tailwind + TypeScript (source)
 ├── server/                   # Node.js + Fastify + TypeScript (serves frontend + API)
 ├── stt-service/              # Python + Whisper small.en
-├── tts-service/              # Python + Coqui TTS (VITS)
+├── tts-service/              # Python + Kokoro TTS (PyTorch)
+├── tts2-service/             # Python + Kokoro TTS (ONNX Runtime + MIGraphX)
 ├── ollama-service/           # Ollama with gemma-3 model
 ├── docker/
 │   └── Dockerfile.rocm-base  # Shared ROCm 7.1 PyTorch base image
@@ -75,7 +78,8 @@ http://localhost:3001
 |---------|------|-------------|
 | Server | 3001 | Fastify server (serves frontend + API) |
 | STT Service | 8001 | Whisper-based speech-to-text |
-| TTS Service | 8002 | Coqui TTS (VITS) text-to-speech |
+| TTS Service | 8002 | Kokoro TTS (PyTorch) text-to-speech |
+| TTS2 Service | 8003 | Kokoro TTS (ONNX Runtime + MIGraphX) text-to-speech |
 | Ollama | 11434 | LLM inference with gemma-3 |
 
 ## API Endpoints
@@ -141,12 +145,53 @@ Convert text to speech audio.
 **Request:**
 ```json
 {
-  "text": "Text to synthesize"
+  "text": "Text to synthesize",
+  "voice": "af_heart",
+  "speed": 1.0
 }
 ```
 
 **Response:**
 - Audio file (WAV)
+
+## Alternative TTS Service (tts2-service)
+
+The project includes an alternative TTS implementation using **kokoro-onnx** with ONNX Runtime and MIGraphX execution provider. This provides an alternative GPU acceleration path for AMD GPUs.
+
+Onnx runtime consists of native code, quicker than the pytorch libraries.
+Also, AMD now recommends using onnxruntime-migraphx over onnxruntime-rocm.
+
+Performance wise, for 30 words TTS conversion on Radeon 9070xt
+- pytorch rocm kokoro 15 seconds
+- onnxruntime-migraphx - 3 seconds
+
+### Differences
+
+| Feature | tts-service | tts2-service |
+|---------|-------------|--------------|
+| Backend | PyTorch + ROCm | ONNX Runtime + MIGraphX |
+| Model | Kokoro (PyTorch) | Kokoro ONNX |
+| Port | 8002 | 8003 |
+| GPU Provider | ROCm via PyTorch CUDA API | MIGraphXExecutionProvider |
+
+### Switching to tts2-service
+
+To use the ONNX-based TTS service, update the `TTS_SERVICE_URL` in `docker-compose.yml`:
+
+```yaml
+environment:
+  - TTS_SERVICE_URL=http://tts2-service:8003
+```
+
+Then restart the services:
+
+```bash
+docker-compose up --build
+```
+
+### API Compatibility
+
+Both TTS services expose identical endpoints (`/synthesize` and `/health`), allowing seamless switching between implementations.
 
 ## Development
 
@@ -164,8 +209,11 @@ cd server && npm run dev
 # STT Service only
 cd stt-service && python app.py
 
-# TTS Service only
+# TTS Service only (PyTorch)
 cd tts-service && python app.py
+
+# TTS2 Service only (ONNX Runtime + MIGraphX)
+cd tts2-service && python app.py
 ```
 
 ### Environment Variables
