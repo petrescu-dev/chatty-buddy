@@ -37,6 +37,9 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8002:8002"
+    volumes:
+      - /opt/rocm-7.1.1:/opt/rocm:ro
+      - tts-miopen-cache:/root/.cache/miopen
     devices:
       - /dev/kfd:/dev/kfd
       - /dev/dri:/dev/dri
@@ -45,6 +48,8 @@ services:
       - render
     environment:
       - HSA_OVERRIDE_GFX_VERSION=12.0.1
+      - ROCM_PATH=/opt/rocm
+      - MIOPEN_USER_DB_PATH=/root/.cache/miopen
     security_opt:
       - seccomp:unconfined
 
@@ -69,3 +74,4 @@ services:
 
 volumes:
   ollama-data:
+  tts-miopen-cache:

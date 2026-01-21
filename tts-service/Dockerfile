@@ -1,5 +1,5 @@
-# TTS Service - Text-to-Speech using Coqui XTTS-v2
-# Extends the shared ROCm base image with XTTS-specific dependencies
+# TTS Service - Text-to-Speech using Kokoro
+# Extends the shared ROCm base image with Kokoro-specific dependencies
 #
 # Build the base image first:
 #   docker build -t chatty-buddy-rocm-base -f docker/Dockerfile.rocm-base .
@@ -9,9 +9,9 @@
 FROM chatty-buddy-rocm-base
 
 LABEL maintainer="chatty-buddy"
-LABEL description="Text-to-Speech service using VITS multi-speaker"
+LABEL description="Text-to-Speech service using Kokoro-82M"
 
-# Install espeak-ng for phonemization (required by VITS model)
+# Install espeak-ng for phonemization (required by Kokoro for fallback)
 RUN apt-get update && apt-get install -y \
     espeak-ng \
     && rm -rf /var/lib/apt/lists/*
@@ -20,15 +20,11 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt /app/requirements.txt
 
 # Install Python dependencies
-# TTS package will install its own dependencies but won't override our ROCm PyTorch
-# since we already have a compatible version installed
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Pre-download the VITS model during build
-# This avoids downloading on first request and ensures reproducible builds
-# COQUI_TOS_AGREED=1 accepts the CPML license non-interactively
-ENV COQUI_TOS_AGREED=1
-RUN python -c "from TTS.api import TTS; TTS('tts_models/en/vctk/vits')"
+# Pre-download the Kokoro model during build
+# This initializes the pipeline and downloads model weights
+RUN python -c "from kokoro import KPipeline; KPipeline(lang_code='a')"
 
 # Copy application code
 COPY . /app/

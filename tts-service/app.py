@@ -1,21 +1,22 @@
 """
-Text-to-Speech Service using Coqui VITS
+Text-to-Speech Service using Kokoro
 
 This Flask service provides an HTTP endpoint for synthesizing speech from text
-using the VITS model from Coqui with multiple built-in speakers.
+using the Kokoro-82M model, a lightweight but high-quality TTS model.
 
 Endpoint:
     POST /synthesize
-    - Accepts: JSON { "text": string, "speaker_id": string (optional) }
+    - Accepts: JSON { "text": string, "voice": string (optional), "lang": string (optional) }
     - Returns: Audio file (WAV)
 """
 
 import io
 import logging
 from flask import Flask, request, jsonify, send_file
-from TTS.api import TTS
+from kokoro import KPipeline
 import torch
 import soundfile as sf
+import numpy as np
 
 # Configure logging
 logging.basicConfig(
@@ -27,27 +28,50 @@ logger = logging.getLogger(__name__)
 # Initialize Flask app
 app = Flask(__name__)
 
-# Global TTS instance (loaded once at startup)
-tts = None
+# Global pipeline instance (loaded once at startup)
+pipeline = None
 
-# Model name - VITS with VCTK multi-speaker dataset (English)
-# This model has 109 built-in speakers and doesn't require voice cloning
-MODEL_NAME = "tts_models/en/vctk/vits"
+# Audio sample rate for Kokoro output
+SAMPLE_RATE = 24000
 
-# Audio sample rate for VITS output
-SAMPLE_RATE = 22050
+# Default voice
+DEFAULT_VOICE = "af_heart"
 
-# Default speaker ID (p225 is a clear female voice)
-DEFAULT_SPEAKER = "p225"
+# Default language code
+DEFAULT_LANG = "a"  # American English
+
+# Supported language codes
+# 'a' => American English, 'b' => British English
+# 'e' => Spanish, 'f' => French, 'h' => Hindi
+# 'i' => Italian, 'j' => Japanese, 'p' => Brazilian Portuguese
+# 'z' => Mandarin Chinese
+SUPPORTED_LANGS = {
+    "a": "American English",
+    "b": "British English",
+    "e": "Spanish",
+    "f": "French",
+    "h": "Hindi",
+    "i": "Italian",
+}
+
+# Available voices (American English examples)
+AVAILABLE_VOICES = [
+    "af_heart",    # American female
+    "af_bella",    # American female
+    "af_nicole",   # American female
+    "af_sarah",    # American female
+    "af_sky",      # American female
+    "am_adam",     # American male
+    "am_michael",  # American male
+    "bf_emma",     # British female
+    "bf_isabella", # British female
+    "bm_george",   # British male
+    "bm_lewis",    # British male
+]
 
 
 def get_device():
-    """Determine the best available device for inference.
-    
-    Raises:
-        RuntimeError: If no GPU is available. CPU-only inference is too slow
-            for practical voice chat use.
-    """
+    """Determine the best available device for inference."""
     # Note: torch.cuda.* APIs work for both NVIDIA CUDA and AMD ROCm.
     # When PyTorch is built with ROCm support, the CUDA API is mapped
     # to ROCm via HIP (Heterogeneous-compute Interface for Portability).
@@ -63,32 +87,30 @@ def get_device():
 
 
 def load_model():
-    """Load the VITS model on startup."""
-    global tts
+    """Load the Kokoro pipeline on startup."""
+    global pipeline
     device = get_device()
     
-    logger.info("Loading VITS model...")
+    logger.info(f"Loading Kokoro pipeline on device: {device}")
     
-    # Load the model using Coqui TTS API and move to device
-    tts = TTS(MODEL_NAME).to(device)
+    # Initialize pipeline with American English and explicit device
+    pipeline = KPipeline(lang_code=DEFAULT_LANG, device=device)
     
-    logger.info("Model loaded successfully")
-    return tts
+    # Verify GPU is being used
+    logger.info(f"Kokoro pipeline loaded successfully on {device}")
+    logger.info(f"CUDA memory allocated: {torch.cuda.memory_allocated() / 1024**2:.1f} MB")
+    
+    return pipeline
 
 
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint for container orchestration."""
-    # Get available speakers from the model
-    speakers = []
-    if tts is not None and hasattr(tts, 'speakers'):
-        speakers = tts.speakers if tts.speakers else []
-    
     return jsonify({
         "status": "healthy",
-        "model_loaded": tts is not None,
-        "available_speakers": speakers[:20] if len(speakers) > 20 else speakers,  # Limit response size
-        "total_speakers": len(speakers)
+        "model_loaded": pipeline is not None,
+        "available_voices": AVAILABLE_VOICES,
+        "supported_languages": SUPPORTED_LANGS
     })
 
 
@@ -99,9 +121,10 @@ def synthesize():
     
     Expects a JSON body with:
     - 'text' (required): The text to synthesize
-    - 'speaker_id' (optional): Speaker ID from the model (default: "p225")
+    - 'voice' (optional): Voice ID (default: "af_heart")
+    - 'speed' (optional): Speech speed multiplier (default: 1.0)
     
-    Use GET /health to see available speaker IDs.
+    Use GET /health to see available voices.
     
     Returns:
         Audio file in WAV format
@@ -119,29 +142,44 @@ def synthesize():
         return jsonify({"error": "No text field provided"}), 400
     
     text = data['text']
-    speaker_id = data.get('speaker_id', DEFAULT_SPEAKER)
+    voice = data.get('voice', DEFAULT_VOICE)
+    speed = data.get('speed', 1.0)
     
     if not text or not text.strip():
         logger.warning("Empty text provided")
         return jsonify({"error": "Text cannot be empty"}), 400
     
-    # Validate speaker_id if model has speakers
-    if tts.speakers and speaker_id not in tts.speakers:
-        logger.warning(f"Invalid speaker_id: {speaker_id}")
-        return jsonify({
-            "error": f"Invalid speaker_id: {speaker_id}",
-            "available_speakers": tts.speakers[:20] if len(tts.speakers) > 20 else tts.speakers
-        }), 400
-    
     try:
-        logger.info(f"Synthesizing speech for text (speaker={speaker_id}): {text[:100]}...")
+        logger.info(f"Synthesizing speech for text (voice={voice}): {text[:100]}...")
         
-        # Generate speech using VITS with speaker ID
-        wav = tts.tts(text=text, speaker=speaker_id)
+        # Log GPU memory before synthesis
+        if torch.cuda.is_available():
+            logger.info(f"GPU memory before synthesis: {torch.cuda.memory_allocated() / 1024**2:.1f} MB")
+        else:
+            logger.info("No GPU available, using CPU (will be slower)")
+        
+        # Generate speech using Kokoro pipeline
+        # The generator yields (graphemes, phonemes, audio) tuples
+        generator = pipeline(text, voice=voice, speed=speed)
+        
+        # Collect all audio segments
+        audio_segments = []
+        for i, (gs, ps, audio) in enumerate(generator):
+            audio_segments.append(audio)
+        
+        # Concatenate all segments
+        if audio_segments:
+            full_audio = np.concatenate(audio_segments)
+        else:
+            return jsonify({"error": "No audio generated"}), 500
+        
+        # Log GPU memory after synthesis
+        if torch.cuda.is_available():
+            logger.info(f"GPU memory after synthesis: {torch.cuda.memory_allocated() / 1024**2:.1f} MB")
         
         # Write to buffer as WAV
         audio_buffer = io.BytesIO()
-        sf.write(audio_buffer, wav, SAMPLE_RATE, format='WAV')
+        sf.write(audio_buffer, full_audio, SAMPLE_RATE, format='WAV')
         audio_buffer.seek(0)
         
         logger.info("Speech synthesis complete")
