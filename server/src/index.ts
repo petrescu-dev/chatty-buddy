@@ -7,11 +7,23 @@
  * 3. Sends transcription to Ollama LLM for response
  * 4. Forwards LLM response to TTS service for audio synthesis
  * 5. Returns transcription, response text, and audio to frontend
+ *
+ * It also serves the built frontend static files.
  */
 
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 import Fastify from "fastify";
 import fastifyMultipart from "@fastify/multipart";
 import fastifyCors from "@fastify/cors";
+import fastifyStatic from "@fastify/static";
+
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Path to frontend build directory
+const FRONTEND_DIR = process.env.FRONTEND_DIR || join(__dirname, "../../frontend/dist");
 
 // Service URLs from environment variables
 const STT_SERVICE_URL = process.env.STT_SERVICE_URL || "http://localhost:8001";
@@ -51,6 +63,12 @@ await fastify.register(fastifyMultipart, {
   limits: {
     fileSize: 50 * 1024 * 1024, // 50MB max file size
   },
+});
+
+// Serve static frontend files
+await fastify.register(fastifyStatic, {
+  root: FRONTEND_DIR,
+  prefix: "/",
 });
 
 // Types
@@ -214,6 +232,19 @@ fastify.post<{ Reply: ChatResponse }>("/api/chat", async (request, reply) => {
     fastify.log.error(error, "Chat pipeline error");
     throw error;
   }
+});
+
+/**
+ * SPA catch-all route - serve index.html for client-side routing
+ * This must be registered after all other routes
+ */
+fastify.setNotFoundHandler(async (request, reply) => {
+  // Only serve index.html for non-API routes (SPA client-side routing)
+  if (!request.url.startsWith("/api/") && !request.url.startsWith("/health")) {
+    return reply.sendFile("index.html");
+  }
+  reply.code(404);
+  return { error: "Not found" };
 });
 
 // Start the server

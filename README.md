@@ -5,30 +5,26 @@ A voice chat agent application that combines speech-to-text, LLM-powered respons
 ## Architecture
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│    Frontend     │────▶│     Server      │────▶│   ML Services   │
-│  React/Vite     │     │  Node/Fastify   │     │   ROCm GPU      │
-│    :5173        │◀────│     :3001       │◀────│                 │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-                                                        │
-                              ┌─────────────────────────┼─────────────────────────┐
-                              │                         │                         │
-                              ▼                         ▼                         ▼
-                    ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-                    │  STT Service    │     │     Ollama      │     │  TTS Service    │
-                    │  Whisper        │     │   gemma-3       │     │     Dia         │
-                    │    :8001        │     │    :11434       │     │    :8002        │
-                    └─────────────────┘     └─────────────────┘     └─────────────────┘
+┌─────────────────────────────────────┐     ┌─────────────────────────────────────┐
+│           Server (:3001)            │     │          ML Services (ROCm GPU)     │
+│  ┌─────────────┐  ┌──────────────┐  │     │                                     │
+│  │  Frontend   │  │   Fastify    │──┼────▶│  ┌─────────┐  ┌───────┐  ┌───────┐ │
+│  │  (Static)   │  │     API      │  │     │  │   STT   │  │  LLM  │  │  TTS  │ │
+│  │  React/Vite │  │              │◀─┼─────│  │ Whisper │  │gemma-3│  │ VITS  │ │
+│  └─────────────┘  └──────────────┘  │     │  │  :8001  │  │:11434 │  │ :8002 │ │
+└─────────────────────────────────────┘     │  └─────────┘  └───────┘  └───────┘ │
+                                            └─────────────────────────────────────┘
 ```
 
 ## Project Structure
 
 ```
 chatty-buddy/
-├── frontend/                 # React + Vite + Tailwind + TypeScript
-├── server/                   # Node.js + Fastify + TypeScript
+├── frontend/                 # React + Vite + Tailwind + TypeScript (source)
+├── server/                   # Node.js + Fastify + TypeScript (serves frontend + API)
 ├── stt-service/              # Python + Whisper small.en
-├── tts-service/              # Python + Dia model
+├── tts-service/              # Python + Coqui TTS (VITS)
+├── ollama-service/           # Ollama with gemma-3 model
 ├── docker/
 │   └── Dockerfile.rocm-base  # Shared ROCm 7.1 PyTorch base image
 ├── docker-compose.yml        # Orchestrates all services
@@ -62,7 +58,7 @@ docker-compose up --build
 In a separate terminal, pull the gemma-3 model into Ollama:
 
 ```bash
-docker-compose exec ollama ollama pull gemma3
+docker-compose exec ollama ollama pull gemma3:4b
 ```
 
 ### 4. Access the Application
@@ -70,17 +66,16 @@ docker-compose exec ollama ollama pull gemma3
 Open your browser and navigate to:
 
 ```
-http://localhost:5173
+http://localhost:3001
 ```
 
 ## Services
 
 | Service | Port | Description |
 |---------|------|-------------|
-| Frontend | 5173 | React web interface with voice recording |
-| Server | 3001 | Fastify API orchestrating ML services |
+| Server | 3001 | Fastify server (serves frontend + API) |
 | STT Service | 8001 | Whisper-based speech-to-text |
-| TTS Service | 8002 | Dia-based text-to-speech |
+| TTS Service | 8002 | Coqui TTS (VITS) text-to-speech |
 | Ollama | 11434 | LLM inference with gemma-3 |
 
 ## API Endpoints
@@ -100,7 +95,23 @@ Send audio for processing through the voice chat pipeline.
 {
   "transcription": "User's spoken text",
   "response": "Agent's text response",
-  "audioUrl": "base64 encoded audio or blob URL"
+  "audioBase64": "base64 encoded WAV audio"
+}
+```
+
+#### `GET /health`
+
+Health check endpoint.
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "services": {
+    "stt": "http://stt-service:8001",
+    "llm": "http://ollama:11434",
+    "tts": "http://tts-service:8002"
+  }
 }
 ```
 
@@ -111,7 +122,7 @@ Send audio for processing through the voice chat pipeline.
 Convert audio to text.
 
 **Request:**
-- Content-Type: `multipart/form-data` or audio file
+- Content-Type: `multipart/form-data`
 - Body: Audio file (WAV/WebM)
 
 **Response:**
@@ -144,10 +155,10 @@ Convert text to speech audio.
 You can run services individually for development:
 
 ```bash
-# Frontend only
-cd frontend && npm run dev
+# Build frontend
+cd frontend && npm run build
 
-# Server only
+# Server (with frontend)
 cd server && npm run dev
 
 # STT Service only
@@ -161,10 +172,11 @@ cd tts-service && python app.py
 
 | Variable | Service | Description |
 |----------|---------|-------------|
-| `VITE_API_URL` | Frontend | Server API URL |
+| `FRONTEND_DIR` | Server | Path to frontend build directory |
 | `STT_SERVICE_URL` | Server | Speech-to-text service URL |
 | `LLM_SERVICE_URL` | Server | Ollama service URL |
 | `TTS_SERVICE_URL` | Server | Text-to-speech service URL |
+| `LLM_MODEL` | Server | Ollama model name (default: gemma3:4b) |
 | `HSA_OVERRIDE_GFX_VERSION` | ML Services | ROCm GPU version override |
 
 ## Troubleshooting
@@ -188,7 +200,7 @@ Run the container with the required device mappings (already configured in docke
 Make sure to pull the model after starting the containers:
 
 ```bash
-docker-compose exec ollama ollama pull gemma3
+docker-compose exec ollama ollama pull gemma3:4b
 ```
 
 ## License

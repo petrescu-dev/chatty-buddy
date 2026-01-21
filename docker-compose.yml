@@ -1,27 +1,10 @@
 services:
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports:
-      - "5173:5173"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    environment:
-      - VITE_API_URL=http://localhost:3001
-    depends_on:
-      - server
-
   server:
     build:
-      context: ./server
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: server/Dockerfile
     ports:
       - "3001:3001"
-    volumes:
-      - ./server:/app
-      - /app/node_modules
     environment:
       - STT_SERVICE_URL=http://stt-service:8001
       - LLM_SERVICE_URL=http://ollama:11434
@@ -37,8 +20,6 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8001:8001"
-    volumes:
-      - ./stt-service:/app
     devices:
       - /dev/kfd:/dev/kfd
       - /dev/dri:/dev/dri
@@ -56,8 +37,6 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8002:8002"
-    volumes:
-      - ./tts-service:/app
     devices:
       - /dev/kfd:/dev/kfd
       - /dev/dri:/dev/dri

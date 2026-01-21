@@ -1,4 +1,37 @@
+# Python
 *.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.eggs/
+venv/
+.venv/
 
+# Node.js
 node_modules/
 dist/
+*.log
+npm-debug.log*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Audio test files
+*.wav
+*.webm
+*.mp3
+!test-samples/

@@ -1,0 +1,46 @@
+# Dependencies (will be installed in container)
+**/node_modules/
+
+# Server build output (will be built in container)
+server/dist/
+
+# Python services (not needed for server build)
+stt-service/
+tts-service/
+ollama-service/
+docker/
+
+# Python cache
+**/__pycache__/
+**/*.pyc
+
+# IDE
+.idea/
+.vscode/
+**/*.swp
+**/*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+**/npm-debug.log*
+
+# Environment files
+.env
+.env.local
+**/.env.local
+
+# Test audio files
+*.wav
+*.webm
+*.mp3
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
