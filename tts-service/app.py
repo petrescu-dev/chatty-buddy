@@ -59,18 +59,18 @@ def get_device():
         )
     
     logger.info(f"Using GPU device: {torch.cuda.get_device_name(0)}")
-    return True  # gpu=True for TTS API
+    return "cuda"
 
 
 def load_model():
-    """Load the XTTS-v2 model on startup."""
+    """Load the VITS model on startup."""
     global tts
-    use_gpu = get_device()
+    device = get_device()
     
-    logger.info(f"Loading XTTS-v2 model...")
+    logger.info("Loading VITS model...")
     
-    # Load the model using Coqui TTS API
-    tts = TTS(MODEL_NAME, gpu=use_gpu)
+    # Load the model using Coqui TTS API and move to device
+    tts = TTS(MODEL_NAME).to(device)
     
     logger.info("Model loaded successfully")
     return tts
