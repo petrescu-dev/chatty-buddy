@@ -58,7 +58,7 @@ RUN pip install --upgrade pip setuptools wheel
 # Install PyTorch with ROCm 7.1 support (nightly build)
 # This includes CUDA-like GPU acceleration for AMD GPUs
 RUN pip install --pre torch torchvision torchaudio \
-    --index-url https://download.pytorch.org/whl/nightly/rocm7.1
+    --index-url https://download.pytorch.org/whl/rocm7.1
 
 # Set working directory
 WORKDIR /app
